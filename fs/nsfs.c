@@ -75,6 +75,7 @@ slow:
 	inode = new_inode_pseudo(mnt->mnt_sb);
 	if (!inode) {
 		ns->ops->put(ns);
+		mntput(mnt);
 		return ERR_PTR(-ENOMEM);
 	}
 	inode->i_ino = ns->inum;
@@ -96,6 +97,7 @@ slow:
 	if (d) {
 		d_delete(dentry);	/* make sure ->d_prune() does nothing */
 		dput(dentry);
+		mntput(mnt);
 		cpu_relax();
 		return ERR_PTR(-EAGAIN);
 	}
