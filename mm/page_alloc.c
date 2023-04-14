@@ -177,8 +177,10 @@ bool pm_suspended_storage(void)
 }
 #endif /* CONFIG_PM_SLEEP */
 
+#if 0
 #ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE
 unsigned int pageblock_order __read_mostly;
+#endif
 #endif
 
 static void __free_pages_ok(struct page *page, unsigned int order);
@@ -244,9 +246,13 @@ char * const migratetype_names[MIGRATE_TYPES] = {
 compound_page_dtor * const compound_page_dtors[] = {
 	NULL,
 	free_compound_page,
+
+#if 0
 #ifdef CONFIG_HUGETLB_PAGE
 	free_huge_page,
 #endif
+#endif
+
 };
 
 /*
@@ -5340,6 +5346,7 @@ static inline void setup_usemap(struct pglist_data *pgdat, struct zone *zone,
 				unsigned long zone_start_pfn, unsigned long zonesize) {}
 #endif /* CONFIG_SPARSEMEM */
 
+#if 0
 #ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE
 
 /* Initialise the number of pages represented by NR_PAGEBLOCK_BITS */
@@ -5376,6 +5383,17 @@ void __paginginit set_pageblock_order(void)
 }
 
 #endif /* CONFIG_HUGETLB_PAGE_SIZE_VARIABLE */
+#endif
+
+/*
+ * When CONFIG_HUGETLB_PAGE_SIZE_VARIABLE is not set, set_pageblock_order()
+ * is unused as pageblock_order is set at compile-time. See
+ * include/linux/pageblock-flags.h for the values of pageblock_order based on
+ * the kernel config
+ */
+void __paginginit set_pageblock_order(void)
+{
+}
 
 static unsigned long __paginginit calc_memmap_size(unsigned long spanned_pages,
 						   unsigned long present_pages)
