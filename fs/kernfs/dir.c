@@ -640,8 +640,6 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 					     unsigned flags)
 {
 	struct kernfs_node *kn;
-	u32 gen;
-	int cursor;
 	int ret;
 
 	name = kstrdup_const(name, GFP_KERNEL);
@@ -654,17 +652,12 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 
 	idr_preload(GFP_KERNEL);
 	spin_lock(&kernfs_idr_lock);
-	cursor = idr_get_cursor(&root->ino_idr);
-	ret = idr_alloc_cyclic(&root->ino_idr, kn, 1, 0, GFP_ATOMIC);
-	if (ret >= 0 && ret < cursor)
-		root->next_generation++;
-	gen = root->next_generation;
+	ret = idr_alloc(&root->ino_idr, kn, 1, 0, GFP_ATOMIC);
 	spin_unlock(&kernfs_idr_lock);
 	idr_preload_end();
 	if (ret < 0)
 		goto err_out2;
 	kn->ino = ret;
-	kn->generation = gen;
 
 	/*
 	 * set ino first. This barrier is paired with atomic_inc_not_zero in
@@ -951,7 +944,6 @@ struct kernfs_root *kernfs_create_root(struct kernfs_syscall_ops *scops,
 
 	idr_init(&root->ino_idr);
 	INIT_LIST_HEAD(&root->supers);
-	root->next_generation = 1;
 
 	kn = __kernfs_new_node(root, "", S_IFDIR | S_IRUGO | S_IXUGO,
 			       KERNFS_DIR);

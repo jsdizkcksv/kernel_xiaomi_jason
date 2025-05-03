@@ -136,7 +136,6 @@ struct kernfs_node {
 	umode_t			mode;
 	unsigned int		ino;
 	struct kernfs_iattrs	*iattr;
-	u32			generation;
 };
 
 /*
@@ -166,7 +165,6 @@ struct kernfs_root {
 
 	/* private fields, do not use outside kernfs proper */
 	struct idr		ino_idr;
-	u32			next_generation;
 	struct kernfs_syscall_ops *syscall_ops;
 
 	/* list of kernfs_super_info of this root, protected by kernfs_mutex */
