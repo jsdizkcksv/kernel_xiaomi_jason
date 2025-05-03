@@ -623,7 +623,7 @@ static int pty_unix98_ioctl(struct tty_struct *tty,
  */
 
 static struct tty_struct *ptm_unix98_lookup(struct tty_driver *driver,
-		struct file *file, int idx)
+		struct inode *ptm_inode, int idx)
 {
 	/* Master must be open via /dev/ptmx */
 	return ERR_PTR(-EIO);
@@ -639,12 +639,12 @@ static struct tty_struct *ptm_unix98_lookup(struct tty_driver *driver,
  */
 
 static struct tty_struct *pts_unix98_lookup(struct tty_driver *driver,
-		struct file *file, int idx)
+		struct inode *pts_inode, int idx)
 {
 	struct tty_struct *tty;
 
 	mutex_lock(&devpts_mutex);
-	tty = devpts_get_priv(file->f_path.dentry);
+	tty = devpts_get_priv(pts_inode);
 	mutex_unlock(&devpts_mutex);
 	/* Master must be open before slave */
 	if (!tty)
@@ -728,7 +728,7 @@ static int ptmx_open(struct inode *inode, struct file *filp)
 {
 	struct pts_fs_info *fsi;
 	struct tty_struct *tty;
-	struct dentry *dentry;
+	struct inode *slave_inode;
 	int retval;
 	int index;
 
@@ -775,12 +775,14 @@ static int ptmx_open(struct inode *inode, struct file *filp)
 
 	tty_add_file(tty, filp);
 
-	dentry = devpts_pty_new(fsi, index, tty->link);
-	if (IS_ERR(dentry)) {
-		retval = PTR_ERR(dentry);
+	slave_inode = devpts_pty_new(fsi,
+			MKDEV(UNIX98_PTY_SLAVE_MAJOR, index), index,
+			tty->link);
+	if (IS_ERR(slave_inode)) {
+		retval = PTR_ERR(slave_inode);
 		goto err_release;
 	}
-	tty->link->driver_data = dentry;
+	tty->link->driver_data = slave_inode;
 
 	retval = ptm_driver->ops->open(tty, filp);
 	if (retval)

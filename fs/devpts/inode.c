@@ -604,7 +604,8 @@ void devpts_put_ref(struct pts_fs_info *fsi)
  *
  * The created inode is returned. Remove it from /dev/pts/ by devpts_pty_kill.
  */
-struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
+struct inode *devpts_pty_new(struct pts_fs_info *fsi, dev_t device, int index,
+		void *priv)
 {
 	struct dentry *dentry;
 	struct super_block *sb;
@@ -628,21 +629,25 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
 	inode->i_uid = opts->setuid ? opts->uid : current_fsuid();
 	inode->i_gid = opts->setgid ? opts->gid : current_fsgid();
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-	init_special_inode(inode, S_IFCHR|opts->mode, MKDEV(UNIX98_PTY_SLAVE_MAJOR, index));
+	init_special_inode(inode, S_IFCHR|opts->mode, device);
+	inode->i_private = priv;
 
 	sprintf(s, "%d", index);
 
+	mutex_lock(&d_inode(root)->i_mutex);
+
 	dentry = d_alloc_name(root, s);
 	if (dentry) {
-		dentry->d_fsdata = priv;
 		d_add(dentry, inode);
 		fsnotify_create(d_inode(root), dentry);
 	} else {
 		iput(inode);
-		dentry = ERR_PTR(-ENOMEM);
+		inode = ERR_PTR(-ENOMEM);
 	}
 
-	return dentry;
+	mutex_unlock(&d_inode(root)->i_mutex);
+
+	return inode;
 }
 
 /**
@@ -651,10 +656,24 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
  *
  * Returns whatever was passed as priv in devpts_pty_new for a given inode.
  */
-void *devpts_get_priv(struct dentry *dentry)
+void *devpts_get_priv(struct inode *pts_inode)
 {
-	WARN_ON_ONCE(dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC);
-	return dentry->d_fsdata;
+	struct dentry *dentry;
+	void *priv = NULL;
+
+	BUG_ON(pts_inode->i_rdev == MKDEV(TTYAUX_MAJOR, PTMX_MINOR));
+
+	/* Ensure dentry has not been deleted by devpts_pty_kill() */
+	dentry = d_find_alias(pts_inode);
+	if (!dentry)
+		return NULL;
+
+	if (pts_inode->i_sb->s_magic == DEVPTS_SUPER_MAGIC)
+		priv = pts_inode->i_private;
+
+	dput(dentry);
+
+	return priv;
 }
 
 /**
@@ -663,14 +682,24 @@ void *devpts_get_priv(struct dentry *dentry)
  *
  * This is an inverse operation of devpts_pty_new.
  */
-void devpts_pty_kill(struct dentry *dentry)
+void devpts_pty_kill(struct inode *inode)
 {
-	WARN_ON_ONCE(dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC);
+	struct super_block *sb = pts_sb_from_inode(inode);
+	struct dentry *root = sb->s_root;
+	struct dentry *dentry;
 
-	dentry->d_fsdata = NULL;
-	drop_nlink(dentry->d_inode);
+	BUG_ON(inode->i_rdev == MKDEV(TTYAUX_MAJOR, PTMX_MINOR));
+
+	mutex_lock(&d_inode(root)->i_mutex);
+
+	dentry = d_find_alias(inode);
+
+	drop_nlink(inode);
 	d_delete(dentry);
 	dput(dentry);	/* d_alloc_name() in devpts_pty_new() */
+	dput(dentry);		/* d_find_alias above */
+
+	mutex_unlock(&d_inode(root)->i_mutex);
 }
 
 static int __init init_devpts_fs(void)
