@@ -674,7 +674,7 @@ static void pty_unix98_shutdown(struct tty_struct *tty)
 	else
 		fsi = tty->link->driver_data;
 	devpts_kill_index(fsi, tty->index);
-	devpts_release(fsi);
+	devpts_put_ref(fsi);
 }
 
 static const struct tty_operations ptm_unix98_ops = {
@@ -741,11 +741,10 @@ static int ptmx_open(struct inode *inode, struct file *filp)
 	if (retval)
 		return retval;
 
-	fsi = devpts_acquire(filp);
-	if (IS_ERR(fsi)) {
-		retval = PTR_ERR(fsi);
+	fsi = devpts_get_ref(inode, filp);
+	retval = -ENODEV;
+	if (!fsi)
 		goto out_free_file;
-	}
 
 	/* find a device that is not in use. */
 	mutex_lock(&devpts_mutex);
@@ -754,7 +753,7 @@ static int ptmx_open(struct inode *inode, struct file *filp)
 
 	retval = index;
 	if (index < 0)
-		goto out_put_fsi;
+		goto out_put_ref;
 
 
 	mutex_lock(&tty_mutex);
@@ -798,8 +797,8 @@ err_release:
 	return retval;
 out:
 	devpts_kill_index(fsi, index);
-out_put_fsi:
-	devpts_release(fsi);
+out_put_ref:
+	devpts_put_ref(fsi);
 out_free_file:
 	tty_free_file(filp);
 	return retval;
